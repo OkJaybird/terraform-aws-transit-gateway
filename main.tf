@@ -23,8 +23,10 @@ locals {
   vpc_route_table_destination_cidr = flatten([
     for k, v in var.vpc_attachments : [
       for rtb_id in lookup(v, "vpc_route_table_ids", []) : {
-        rtb_id = rtb_id
-        cidr   = v["tgw_destination_cidr"]
+        for tgw_destination_cidr in v["tgw_destination_cidrs"] : {
+          rtb_id = rtb_id
+          cidr = v["tgw_destination_cidr"]
+        }
       }
     ]
   ])
