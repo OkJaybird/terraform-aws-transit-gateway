@@ -4,6 +4,11 @@ output "ec2_transit_gateway_arn" {
   value       = element(concat(aws_ec2_transit_gateway.this.*.arn, [""]), 0)
 }
 
+output "ec2_transit_gateway_region" {
+  description = "EC2 Transit Gateway Amazon Resource Name (ARN)"
+  value       = data.aws_region.this.name
+}
+
 output "ec2_transit_gateway_association_default_route_table_id" {
   description = "Identifier of the default association route table"
   value       = element(concat(aws_ec2_transit_gateway.this.*.association_default_route_table_id, [""]), 0)
@@ -43,7 +48,7 @@ output "ec2_transit_gateway_route_table_id" {
 # aws_ec2_transit_gateway_route
 output "ec2_transit_gateway_route_ids" {
   description = "List of EC2 Transit Gateway Route Table identifier combined with destination"
-  value       = aws_ec2_transit_gateway_route.this.*.id
+  value       = concat(aws_ec2_transit_gateway_route.this.*.id, aws_ec2_transit_gateway_route.tgw_peer.*.id)
 }
 
 # aws_ec2_transit_gateway_vpc_attachment
@@ -55,6 +60,23 @@ output "ec2_transit_gateway_vpc_attachment_ids" {
 output "ec2_transit_gateway_vpc_attachment" {
   description = "Map of EC2 Transit Gateway VPC Attachment attributes"
   value       = aws_ec2_transit_gateway_vpc_attachment.this
+}
+
+# aws_ec2_transit_gateway_peering_attachment and aws_ec2_transit_gateway_peering_attachment_accepter
+output "ec2_transit_gateway_gateway_peering_attachment_ids" {
+  description = "List of EC2 Transit Gateway TGW Peer Attachment identifiers"
+  value       = concat(
+                  [for k, v in aws_ec2_transit_gateway_peering_attachment.this : v.id],
+                  [for k, v in aws_ec2_transit_gateway_peering_attachment_accepter.this : v.id]
+                )
+}
+
+output "ec2_transit_gateway_gateway_peering_attachment" {
+  description = "Map of EC2 Transit Gateway TGW Peer Attachment attributes"
+  value       = merge(
+                  aws_ec2_transit_gateway_peering_attachment.this,
+                  aws_ec2_transit_gateway_peering_attachment_accepter.this
+                )
 }
 
 # aws_ec2_transit_gateway_route_table_association

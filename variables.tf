@@ -59,6 +59,13 @@ variable "vpc_attachments" {
   default     = {}
 }
 
+# TGW attachments
+variable "tgw_peering_attachments" {
+  description = "Maps of maps of TGW peering details to attach to this TGW. Type 'any' to disable type validation by Terraform."
+  type        = any
+  default     = {}
+}
+
 # TGW Route Table association and propagation
 variable "transit_gateway_route_table_id" {
   description = "Identifier of EC2 Transit Gateway Route Table to use with the Target Gateway when reusing it between multiple TGWs"

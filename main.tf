@@ -1,3 +1,6 @@
+data "aws_region" "this" {}
+data "aws_caller_identity" "this" {}
+
 locals {
   vpc_attachments_without_default_route_table_association = {
     for k, v in var.vpc_attachments : k => v if lookup(v, "transit_gateway_default_route_table_association", true) != true
@@ -11,6 +14,18 @@ locals {
   vpc_attachments_with_routes = chunklist(flatten([
     for k, v in var.vpc_attachments : setproduct([{ key = k }], v["tgw_routes"]) if length(lookup(v, "tgw_routes", {})) > 0
   ]), 2)
+
+  tgw_peering_attachments_with_routes = chunklist(flatten([
+    for k, v in var.tgw_peering_attachments : setproduct([{ key = k }], v["tgw_routes"]) if length(lookup(v, "tgw_routes", {})) > 0
+  ]), 2)
+
+  tgw_peering_attachment_requesters = {
+    for k, v in var.tgw_peering_attachments : k => v if lookup(v, "type", {}) == "requester"
+  }
+
+  tgw_peering_attachment_accepters = {
+    for k, v in var.tgw_peering_attachments : k => v if lookup(v, "type", {}) == "accepter"
+  }
 
   tgw_default_route_table_tags_merged = merge(
     {
@@ -172,4 +187,53 @@ resource "aws_ram_resource_share_accepter" "this" {
   count = ! var.create_tgw && var.share_tgw ? 1 : 0
 
   share_arn = var.ram_resource_share_arn
+}
+
+###########################################################
+# Transit Gateway Peering Attachments and Routes
+###########################################################
+resource "aws_ec2_transit_gateway_peering_attachment" "this" {
+  for_each = local.tgw_peering_attachment_requesters
+
+  transit_gateway_id = lookup(each.value, "tgw_id", var.create_tgw ? aws_ec2_transit_gateway.this[0].id : var.transit_gateway_id)
+
+  peer_account_id = lookup(each.value, "peer_account_id", data.aws_caller_identity.this.account_id)
+  peer_region = lookup(each.value, "peer_region", data.aws_region.this.name)
+  peer_transit_gateway_id = lookup(each.value, "peer_transit_gateway_id", null)
+
+  tags = merge(
+    {
+      Name = format("%s-%s", var.name, each.key)
+    },
+    var.tags,
+    var.tgw_vpc_attachment_tags,
+  )
+}
+
+resource "aws_ec2_transit_gateway_peering_attachment_accepter" "this" {
+  for_each = local.tgw_peering_attachment_accepters
+
+  transit_gateway_attachment_id = lookup(each.value, "transit_gateway_attachment_id", null)
+
+  tags = merge(
+    {
+      Name = format("%s-%s", var.name, each.key)
+    },
+    var.tags,
+    var.tgw_vpc_attachment_tags,
+  )
+}
+
+resource "aws_ec2_transit_gateway_route" "tgw_peer" {
+  count = length(local.tgw_peering_attachments_with_routes)
+
+  destination_cidr_block = local.tgw_peering_attachments_with_routes[count.index][1]["destination_cidr_block"]
+  blackhole              = lookup(local.tgw_peering_attachments_with_routes[count.index][1], "blackhole", null)
+
+  transit_gateway_route_table_id = var.create_tgw ? (var.enable_default_route_table_association ? aws_ec2_transit_gateway.this[0].association_default_route_table_id : aws_ec2_transit_gateway_route_table.this[0].id) : var.transit_gateway_route_table_id
+  transit_gateway_attachment_id = tobool(lookup(local.tgw_peering_attachments_with_routes[count.index][1], "blackhole", false)) == false ? (
+    lookup(var.tgw_peering_attachments[local.tgw_peering_attachments_with_routes[count.index][0]["key"]], "type", null) == "requester" ?
+      aws_ec2_transit_gateway_peering_attachment.this[local.tgw_peering_attachments_with_routes[count.index][0]["key"]].id :
+      aws_ec2_transit_gateway_peering_attachment_accepter.this[local.tgw_peering_attachments_with_routes[count.index][0]["key"]].id
+  ) : null
 }
