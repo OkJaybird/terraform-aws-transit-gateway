@@ -103,10 +103,10 @@ resource "aws_ec2_transit_gateway_route" "this" {
 }
 
 resource "aws_route" "this" {
-  for_each = { for x in local.vpc_route_table_destination_cidr : x.rtb_id => x.cidr }
+  for_each = { for x in local.vpc_route_table_destination_cidr : "${x.rtb_id}-${x.cidr}" => [x.rtb_id, x.cidr] }
 
-  route_table_id         = each.key
-  destination_cidr_block = each.value
+  route_table_id         = each.value[0]
+  destination_cidr_block = each.value[1]
   transit_gateway_id     = var.create_tgw ? aws_ec2_transit_gateway.this[0].id : var.transit_gateway_id
 }
 
